@@ -51,39 +51,71 @@ class Trainer():
         self.logger.info('The best model evaluation ACC:{:.4f}, AUC:{:.4f}, r_acc:{:.4f}, f_acc:{:.4f}'.format(ACC, AUC, r_acc, f_acc))
     def train_ffpp_epoch(self, epoch):
         self.model.train()
-        train_loss = 0.0
+        cls_loss = 0.0
+        sim_loss = 0.0
         train_image_num = 0
         y_true, y_pred, y_score = [], [], []
-        for batch_id, sample in enumerate(tqdm(self.dataloader['train'])):
-            batch_size = sample['image'].shape[0]
-            image_batch = sample['image'].to(self.args.device)
-            label_batch = sample['label'].to(self.args.device)
-            # model output + loss
-            outputs = self.model(image_batch)
-            loss = self.criterion['CE'](outputs, label_batch)
-            # compute grads + opt step
-            self.optimizer['CE'].zero_grad()
-            loss.backward()
-            self.optimizer['CE'].step()
-            # record loss 
-            train_loss = train_loss + loss.item() * batch_size  # loss of a batch
-            train_image_num = train_image_num + batch_size  # calculate the training images
-            # collect for metrics
-            value, preds = torch.max(outputs, 1)  # value, dim
-            y_score.extend(outputs.sigmoid().tolist())
-            y_true.extend(label_batch.tolist())
-            y_pred.extend(preds.tolist())
-
+        if self.args.use_sim:
+            ### train HQ and LQ
+            for batch_id, sample in enumerate(tqdm(self.dataloader['train'])):
+                batch_size = sample['HQ']['image'].shape[0]
+                image_batch = sample['HQ']['image'].to(self.args.device)
+                LQ_image_batch = sample['LQ']['image'].to(self.args.device)
+                label_batch = sample['label'].to(self.args.device)
+                # model output + loss
+                hq_features, outputs = self.model(image_batch)
+                lq_features, _ = self.model(LQ_image_batch)
+                loss_ce = self.criterion['CE'](outputs, label_batch)
+                loss_hq_lq = self.criterion['MSE'](hq_features, lq_features)
+                loss = loss_ce + loss_hq_lq  ### 总的loss
+                # compute grads + opt step
+                self.optimizer['CE'].zero_grad()
+                loss.backward()
+                self.optimizer['CE'].step()
+                # record loss 
+                cls_loss = cls_loss + loss_ce.item() * batch_size  # loss of a batch
+                sim_loss = sim_loss + loss_hq_lq.item() * batch_size  # loss of a batch
+                train_image_num = train_image_num + batch_size  # calculate the training images
+                # collect for metrics
+                value, preds = torch.max(outputs, 1)  # value, dim
+                y_score.extend(outputs.sigmoid().tolist())
+                y_true.extend(label_batch.tolist())
+                y_pred.extend(preds.tolist())
+        else:
+            ### train HQ
+            for batch_id, sample in enumerate(tqdm(self.dataloader['train'])):
+                batch_size = sample['HQ']['image'].shape[0]
+                image_batch = sample['HQ']['image'].to(self.args.device)
+                label_batch = sample['label'].to(self.args.device)
+                # model output + loss
+                hq_features, outputs = self.model(image_batch)
+                loss_ce = self.criterion['CE'](outputs, label_batch)
+                loss = loss_ce  ### 总的loss
+                # compute grads + opt step
+                self.optimizer['CE'].zero_grad()
+                loss.backward()
+                self.optimizer['CE'].step()
+                # record loss 
+                cls_loss = cls_loss + loss_ce.item() * batch_size  # loss of a batch
+                train_image_num = train_image_num + batch_size  # calculate the training images
+                # collect for metrics
+                value, preds = torch.max(outputs, 1)  # value, dim
+                y_score.extend(outputs.sigmoid().tolist())
+                y_true.extend(label_batch.tolist())
+                y_pred.extend(preds.tolist())
+        
         # adjust learning rate
         self.logger.info('epoch:{} learning rate = {}'.format(epoch, self.optimizer['CE'].param_groups[0]['lr']))
         if self.scheduler is not None:
             self.scheduler.step()
-        epoch_loss = train_loss / train_image_num
+        epoch_loss = (cls_loss+sim_loss) / train_image_num
+        cls_loss = cls_loss / train_image_num
+        sim_loss = sim_loss / train_image_num
         # compute metrics
         epoch_acc, epoch_AUC, r_acc, f_acc = calc_metrics(y_true, y_pred, y_score)
         # write to tensorboard
         self.board_writer.add_scalars('train', {'train_loss': epoch_loss, 'train_acc': epoch_acc, 'real_acc': r_acc, 'fake_acc':f_acc}, epoch)
-        self.logger.info('epoch:{}/{} train_loss:{:.4f} train_ACC:{:.4f} train_AUC:{:.4f} real_ACC:{:.4f} fake_ACC:{:.4f}'.format(epoch, self.args.num_epochs, epoch_loss, epoch_acc, epoch_AUC, r_acc, f_acc))
+        self.logger.info('epoch:{}/{} train_all_loss:{:.4f} cls_loss:{:.4f} sim_loss:{:.4f} train_ACC:{:.4f} train_AUC:{:.4f} real_ACC:{:.4f} fake_ACC:{:.4f}'.format(epoch, self.args.num_epochs, epoch_loss, cls_loss, sim_loss, epoch_acc, epoch_AUC, r_acc, f_acc))
 
     def val_ffpp(self, epoch):
         self.model.eval()
@@ -93,11 +125,11 @@ class Trainer():
 
         with torch.no_grad():
             for batch_id, sample in enumerate(tqdm(self.dataloader['val'])):
-                batch_size = sample['image'].shape[0]
-                image_batch = sample['image'].to(self.args.device)
+                batch_size = sample['HQ']['image'].shape[0]
+                image_batch = sample['HQ']['image'].to(self.args.device)
                 label_batch = sample['label'].to(self.args.device)
                 # model output + loss
-                outputs = self.model(image_batch)
+                _, outputs = self.model(image_batch)
                 loss = self.criterion['CE'](outputs, label_batch)
                 # record loss
                 val_image_num = val_image_num + batch_size

@@ -7,6 +7,8 @@ from sklearn.metrics import roc_auc_score, accuracy_score
 import torch
 from torchvision import transforms
 from option import args
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 dataset_transforms = {
     'train': transforms.Compose([
@@ -24,6 +26,24 @@ dataset_transforms = {
         transforms.Resize((args.image_size, args.image_size)),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+}
+
+HQ_LQ_transforms = {
+    'train': A.Compose([
+        A.Resize(args.image_size, args.image_size),
+        A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        ToTensorV2(),
+    ]),
+    'val': A.Compose([
+        A.Resize(args.image_size, args.image_size),
+        A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        ToTensorV2(),
+    ]),
+    'test': A.Compose([
+        A.Resize(args.image_size, args.image_size),
+        A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        ToTensorV2(),
     ]),
 }
 
@@ -52,12 +72,11 @@ def evaluate_ffpp(model, dataloader, device):
     y_true, y_pred, y_score = [], [], []
     with torch.no_grad():
         for batch_id, sample in enumerate(tqdm(dataloader)):
-            image_batch = sample['image'].to(device)
+            image_batch = sample['HQ']['image'].to(device)
             label_batch = sample['label'].to(device)
 
-            outputs = model(image_batch)
+            _, outputs = model(image_batch)
             _, preds = torch.max(outputs, 1)
-
             y_score.extend(outputs.sigmoid().tolist())
             y_true.extend(label_batch.tolist())
             y_pred.extend(preds.tolist())
@@ -95,13 +114,15 @@ def printInfo(logger):
 
     logger.info(' \
         \n-------------------------settings-------------\n \
+        message: {}\n \
+        use_sim_loss: {}\n \
         experimen name: {}\n \
         batch_size: {}\n \
         epoch: {}\n \
         lr: {}\n \
         image size: {}\n \
         \n---------------------------------------------- \
-    '.format(args.exp_name, args.batch_size, args.num_epochs, args.lr_rate, args.image_size))
+    '.format(args.message, args.use_sim, args.exp_name, args.batch_size, args.num_epochs, args.lr_rate, args.image_size))
     print('Press any key to continue, or CTRL-C to exit.')
     _ = input('')
 

@@ -61,14 +61,17 @@ def get_full_image_data(root, json_path, nums):
     for dataset in ['Deepfakes', 'Face2Face', 'FaceSwap', 'NeuralTextures', 'Original']:
         if dataset == 'Original':
             ids = real_ids
+            frames = nums
         else:
             ids = fake_ids
+            # frames = int(nums / 4)
+            frames = nums
 
         for id in tqdm(ids):
             label = dataset
             path = os.path.join(root, dataset, id)  # path to each dir
             # nums_file = len(os.listdir(path))  # 单个文件夹下的图片数量
-            index = random.sample(os.listdir(path), nums)  # 随机生成的索引
+            index = random.sample(os.listdir(path), frames)  # 随机生成的索引
             for name in index:
                 # img_name = f'{id}_{i:04d}.png'  # 图片名称
                 img_path = os.path.join(path, name)  # 图片路径
@@ -96,7 +99,9 @@ def get_single_image_data(root, single_set, json_path, nums):
     return data
 
 def main_image(args):
-    for phase in ['train', 'test', 'val']:
+    # for phase in ['train', 'test', 'val']:
+    for phase in ['test', 'val']:
+    # for phase in ['train']:
         if phase == 'train':
             print('train...')
             args.json_path = './splits/train.json'
@@ -104,10 +109,10 @@ def main_image(args):
         elif phase == 'test':
             print('test...')
             args.json_path = './splits/test.json'
-            nums = 30
+            nums = args.nums
         elif phase == 'val':
             print('val...')
-            nums = 30
+            nums = args.nums
             args.json_path = './splits/val.json'
         
         args.save_csv_file_path = os.path.join('../csvfile/images', '{}_{}_{}_{}.csv'.format(args.dataset, args.compression, nums, phase))
@@ -142,13 +147,13 @@ if __name__ == '__main__':
 
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--dataset', type=str, default='NeuralTextures', choices=['Deepfakes', 'Face2Face', 'FaceShifter', 'FaceSwap', 'NeuralTextures', 'HQ', 'RAW', 'LQ'],
+    parser.add_argument('-d', '--dataset', type=str, default='Deepfakes', choices=['Deepfakes', 'Face2Face', 'FaceShifter', 'FaceSwap', 'NeuralTextures', 'HQ', 'RAW', 'LQ'],
                     help='dataset name')
     parser.add_argument('-c', '--compression', type=str, default='c23', choices=['c23', 'c40', 'c0'],
                     help='dataset compression ratio')
     parser.add_argument('--root', type=str, default='/home/TrainingData/laizhenqiang/FF++_all',
                     help='dataset root directory')
-    parser.add_argument('--nums', type=int, default=100,
+    parser.add_argument('--nums', type=int, default=30,
                     help='nums pics in each video')
     parser.add_argument('--json_path', type=str,
                     help='json file path')

@@ -4,11 +4,12 @@ import torch
 from tensorboardX import SummaryWriter
 from torchvision import transforms
 
-from utils import Logger, mkExpDir, printInfo, dataset_transforms
+from utils import Logger, mkExpDir, printInfo, dataset_transforms, HQ_LQ_transforms
 from trainer import Trainer
-from dataset import FFPP_Dataset
+from dataset import FFPP_Dataset, HQ_LQ_Dataset
 from network.CT import CGTransformer
-from network.xception import get_xcep_model
+from network.xception import xception
+from network.Resnet import resnet50
 from loss import SparseCenterLoss
 from option import args
 import random
@@ -42,17 +43,21 @@ def main():
         if not os.path.isfile(csv_file_path[phase]):
             raise OSError('请先生成数据集-{}-阶段的csv文件'.format(phase))
     # dataloader
-    datasets = {x: FFPP_Dataset(csv_file=csv_file_path[x], transform=dataset_transforms[x])
+    logger.info('loading dataset...')
+    datasets = {x: HQ_LQ_Dataset(csv_file=csv_file_path[x], transform=HQ_LQ_transforms[x], phase=x)
                 for x in ['train', 'test', 'val']}
 
     dataloader = {x: torch.utils.data.DataLoader(datasets[x],
                 batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, drop_last=False)
                 for x in ['train', 'test', 'val']}
+    logger.info('dataset is loaded. train:{} val:{} test:{}'.format(datasets['train'].__len__(), datasets['val'].__len__(), datasets['test'].__len__()))
     # model
     if args.model_name == 'CGT':
         model = CGTransformer(att_nums=3).to(args.device)
     elif args.model_name == 'xception':
-        model = get_xcep_model().to(args.device)
+        model = xception(num_classes=2).to(args.device)
+    elif args.model_name == 'Res50':
+        model = resnet50(pretrained=False, num_classes=2).to(args.device)
     else:
         raise OSError('wrong model')
     # loss

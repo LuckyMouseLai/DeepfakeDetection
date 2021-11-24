@@ -153,7 +153,7 @@ class Xception(nn.Module):
         self.conv4 = SeparableConv2d(1536,2048,3,1,1)
         self.bn4 = nn.BatchNorm2d(2048)
 
-        self.fc = nn.Linear(2048, num_classes)
+        self.last_linear = nn.Linear(2048, num_classes)
 
         # #------- init weights --------
         # for m in self.modules():
@@ -202,64 +202,32 @@ class Xception(nn.Module):
         x = self.relu(features)  # [-1, 2048, 10, 10]
 
         x = F.adaptive_avg_pool2d(x, (1, 1))  # [-1, 2048, 1, 1] 
-        x = x.view(x.size(0), -1)  # [-1, 2048]
-        x = self.last_linear(x)  # [-1, num_classes]
-        return x
+        features = x.view(x.size(0), -1)  # [-1, 2048]
+        outputs = self.last_linear(features)  # [-1, num_classes]
+        return features, outputs
 
     def forward(self, input):
         x = self.features(input)  # [-1, 2048, 10, 10]
-        x = self.logits(x)
-        return x
+        features, outputs = self.logits(x)
+        # print(features.shape, outputs.shape)
+        return features, outputs
 
 
-def xception(num_classes=1000, pretrained='imagenet'):
+def xception(num_classes=1000):
     model = Xception(num_classes=num_classes)
-    if pretrained:
-        settings = pretrained_settings['xception'][pretrained]
-        assert num_classes == settings['num_classes'], \
-            "num_classes should be {}, but is {}".format(settings['num_classes'], num_classes)
-
-        model = Xception(num_classes=num_classes)
-        model.load_state_dict(model_zoo.load_url(settings['url']))
-
-        model.input_space = settings['input_space']
-        model.input_size = settings['input_size']
-        model.input_range = settings['input_range']
-        model.mean = settings['mean']
-        model.std = settings['std']
-
-    # TODO: ugly
-    model.last_linear = model.fc
-    del model.fc
+    state_dict = torch.load('/home/Users/laizhenqiang/ckpt/xception-b5690688.pth')
+    for name, weights in state_dict.items():
+            if 'pointwise' in name:
+                state_dict[name] = weights.unsqueeze(-1).unsqueeze(-1)
+            # if 'fc' in name:
+                # print(name)
+                # del state_dict[name]
+    model.load_state_dict(state_dict, strict=False)
     return model
 
 
-
-class get_xcep_model(nn.Module):
-    def __init__(self):
-        super(get_xcep_model, self).__init__()
-
-        # self.extractor = xception(pretrained=False)
-        self.extractor = xception(pretrained=False)
-
-        self.extractor.fc = self.extractor.last_linear
-        del self.extractor.last_linear
-        state_dict = torch.load('/home/Users/laizhenqiang/ckpt/xception-b5690688.pth')
-        for name, weights in state_dict.items():
-            if 'pointwise' in name:
-                state_dict[name] = weights.unsqueeze(-1).unsqueeze(-1)
-        self.extractor.load_state_dict(state_dict)
-        self.extractor.last_linear = self.extractor.fc
-        del self.extractor.fc
-        self.extractor.last_linear = nn.Linear(2048, 2, bias=True)
-
-    def forward(self, image):
-        x = image
-        outputs = self.extractor(x)
-        return outputs
-
 if __name__ == '__main__':
     from torchsummary import summary
-    model = get_xcep_model()
+    model = xception(num_classes=2)
     # print(model)
     summary(model.to('cuda:0'), (3, 299, 299))

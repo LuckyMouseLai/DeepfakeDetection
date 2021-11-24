@@ -26,25 +26,29 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('--device',type=str, default=torch.device('cuda:0' if (torch.cuda.is_available()) else "cpu"),
                     help='use cpu or gpu to run')
-parser.add_argument('--seed',type=int, default=None,
+parser.add_argument('--message',type=str, default='', required=False,
+                    help='training message')
+parser.add_argument('--use_sim',type=bool, default=False, required=False,
+                    help='training message')
+parser.add_argument('--seed',type=int, default=12345,
                     help='seed, if None, denotes no seed')
 parser.add_argument('--data_root', type=str, default='/home/TrainingData/laizhenqiang/train_test_val/FF++_all',
                     help='dataset save root dir')
-parser.add_argument('--model_name', type=str, default='CGT', choices=['xception', 'CGT'],
+parser.add_argument('--model_name', type=str, default='xception', choices=['xception', 'CGT', 'Res50'],
                     help='whitch model used')
-parser.add_argument('--dataset', type=str, default='NeuralTextures', choices=['Deepfakes', 'Face2Face', 'FaceShifter', 'FaceSwap', 'NeuralTextures', 'HQ', 'LQ', 'RAW'],
+parser.add_argument('--dataset', type=str, default='RAW', choices=['Deepfakes', 'Face2Face', 'FaceShifter', 'FaceSwap', 'NeuralTextures', 'HQ', 'LQ', 'RAW'],
                     help='which dataset to train and test')
-parser.add_argument('--compression', type=str, default='c23', choices=['c0', 'c23', 'c40'],
+parser.add_argument('--compression', type=str, default='c0', choices=['c0', 'c23', 'c40'],
                     help='FF++ compression')
-parser.add_argument('--nums', type=int, default=100,
+parser.add_argument('--nums', type=int, default=120,
                     help='random selection of image numbers in a video')
 
 ### train setting
 parser.add_argument('--image_size', type=int, default=299,
                     help='the height of training images')
-parser.add_argument('--batch_size', type=int, default=1,
+parser.add_argument('--batch_size', type=int, default=32,
                     help='batch size of training')
-parser.add_argument('--num_epochs', type=int, default=2,
+parser.add_argument('--num_epochs', type=int, default=20,
                     help='the number of training epochs')
 parser.add_argument('--lr_rate', type=float, default=1e-4,
                     help='learning rate')
